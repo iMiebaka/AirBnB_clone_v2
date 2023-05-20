@@ -1,69 +1,71 @@
 #!/usr/bin/python3
-'''
-creates and distributes an archive to your web servers, using deploy():
-'''
+# a Fabric script that creates & distributes an archive to your web servers
 
-import os
+from fabric.api import env, put, run, local
 from datetime import datetime
-from fabric.api import env, local, put, run, runs_once
+from fabric import decorators
+import os
+
+env.hosts = ['34.139.184.21', '34.74.230.21']
+env.key_filename = "~/.ssh/holberton"
+env.user = "ubuntu
 
 
-env.hosts = ['54.86.220.207', '54.175.137.217']
-
-
-@runs_once
+@decorators.runs_once
 def do_pack():
-    """Archives the static files."""
-    if not os.path.isdir("versions"):
-        os.mkdir("versions")
-    cur_time = datetime.now()
-    output = "versions/web_static_{}{}{}{}{}{}.tgz".format(
-        cur_time.year,
-        cur_time.month,
-        cur_time.day,
-        cur_time.hour,
-        cur_time.minute,
-        cur_time.second
-    )
-    try:
-        print("Packing web_static to {}".format(output))
-        local("tar -cvzf {} web_static".format(output))
-        archize_size = os.stat(output).st_size
-        print("web_static packed: {} -> {} Bytes".format(output, archize_size))
-    except Exception:
-        output = None
-    return output
+    ''' generates a .tgz archive from the contents '''
+    dt_now = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    archive_path = "versions/web_static_{}.tgz".format(dt_now)
+    cmd_compress = "tar -cvzf {} web_static/".format(archive_path)
+    local("mkdir -p versions")
+    archived = local(cmd_compress)
+    if archived.failed:
+        return None
+    return archive_path
 
 
 def do_deploy(archive_path):
-    """Deploys the static files to the host servers.
-    Args:
-        archive_path (str): The path to the archived static files.
-    """
-    if not os.path.exists(archive_path):
+    ''' distributes an archive to your web servers '''
+    if os.path.isfile(archive_path) is False:
         return False
-    file_name = os.path.basename(archive_path)
-    folder_name = file_name.replace(".tgz", "")
-    folder_path = "/data/web_static/releases/{}/".format(folder_name)
-    success = False
-    try:
-        put(archive_path, "/tmp/{}".format(file_name))
-        run("mkdir -p {}".format(folder_path))
-        run("tar -xzf /tmp/{} -C {}".format(file_name, folder_path))
-        run("rm -rf /tmp/{}".format(file_name))
-        run("mv {}web_static/* {}".format(folder_path, folder_path))
-        run("rm -rf {}web_static".format(folder_path))
-        run("rm -rf /data/web_static/current")
-        run("ln -s {} /data/web_static/current".format(folder_path))
-        print('New version is now LIVE!')
-        success = True
-    except Exception:
-        success = False
-    return success
+    put(archive_path, "/tmp")
+    file_split = archive_path.split('/')
+    file_w_ext = file_split[1]
+    file_wo_ext = file_split[1].split('.')[0]
+    if run("mkdir -p /data/web_static/releases/{}/".
+           format(file_wo_ext)).failed is True:
+        return False
+    print("Release folder create done!")
+    if run("tar -xzf /tmp/{}.tgz -C /data/web_static/releases/{}/".
+           format(file_wo_ext, file_wo_ext)).failed is True:
+        return False
+    print("Uncompress the archive done!")
+    if run("rm /tmp/{}".format(file_w_ext)).failed is True:
+        return False
+    print("Delete the archive done!")
+    if run("mv /data/web_static/releases/{}/web_static/*"
+           " /data/web_static/releases/{}/".
+           format(file_wo_ext, file_wo_ext)).failed is True:
+        return False
+    print("Move all files and folders to one directory done!")
+    if run("rm -rf /data/web_static/releases/{}/web_static".
+           format(file_wo_ext)).failed is True:
+        return False
+    print("Delete empty folder web_static done!")
+    if run("rm -rf /data/web_static/current").failed is True:
+        return False
+    print("Delete the symbolic link done!")
+    if run("ln -s /data/web_static/releases/{}/ /data/web_static/current".
+           format(file_wo_ext)).failed is True:
+        return False
+    print("Created new symbolic link done!")
+    print("New version deployed!")
+    return True
 
 
 def deploy():
-    """Archives and deploys the static files to the host servers.
-    """
+    ''' full deploy web_static files '''
     archive_path = do_pack()
-    return do_deploy(archive_path) if archive_path else False
+    if archive_path is None:
+        retunr False
+    return do_deploy(archive_path)

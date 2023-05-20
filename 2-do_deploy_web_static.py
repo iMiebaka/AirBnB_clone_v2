@@ -1,56 +1,48 @@
 #!/usr/bin/python3
-"""Compress web static package
-"""
-from fabric.api import *
-from datetime import datetime
-from os import path
+# a Fabric script that distributes an archive to your web servers
 
+from fabric.api import env, put, run
+import os
 
-env.hosts = ['54.86.220.207', '54.175.137.217']
-env.user = 'ubuntu'
-env.key_filename = '~/.ssh/school'
+env.hosts = ['34.139.184.21', '34.74.230.21']
+env.key_filename = "~/.ssh/holberton"
+env.user = "ubuntu"
 
 
 def do_deploy(archive_path):
-        """Deploy web files to server
-        """
-        try:
-                if not (path.exists(archive_path)):
-                        return False
-
-                # upload archive
-                put(archive_path, '/tmp/')
-
-                # create target dir
-                timestamp = archive_path[-18:-4]
-                run('sudo mkdir -p /data/web_static/\
-releases/web_static_{}/'.format(timestamp))
-
-                # uncompress archive and delete .tgz
-                run('sudo tar -xzf /tmp/web_static_{}.tgz -C \
-/data/web_static/releases/web_static_{}/'
-                    .format(timestamp, timestamp))
-
-                # remove archive
-                run('sudo rm /tmp/web_static_{}.tgz'.format(timestamp))
-
-                # move contents into host web_static
-                run('sudo mv /data/web_static/releases/web_static_{}/web_static/* \
-/data/web_static/releases/web_static_{}/'.format(timestamp, timestamp))
-
-                # remove extraneous web_static dir
-                run('sudo rm -rf /data/web_static/releases/\
-web_static_{}/web_static'
-                    .format(timestamp))
-
-                # delete pre-existing sym link
-                run('sudo rm -rf /data/web_static/current')
-
-                # re-establish symbolic link
-                run('sudo ln -s /data/web_static/releases/\
-web_static_{}/ /data/web_static/current'.format(timestamp))
-        except:
-                return False
-
-        # return True on success
-        return True
+    ''' distributes an archive to your web servers '''
+    if os.path.isfile(archive_path) is False:
+        return False
+    put(archive_path, "/tmp")
+    file_split = archive_path.split('/')
+    file_w_ext = file_split[1]
+    file_wo_ext = file_split[1].split('.')[0]
+    if run("mkdir -p /data/web_static/releases/{}/".
+           format(file_wo_ext)).failed is True:
+        return False
+    print("Release folder create done!")
+    if run("tar -xzf /tmp/{}.tgz -C /data/web_static/releases/{}/".
+           format(file_wo_ext, file_wo_ext)).failed is True:
+        return False
+    print("Uncompress the archive done!")
+    if run("rm /tmp/{}".format(file_w_ext)).failed is True:
+        return False
+    print("Delete the archive done!")
+    if run("mv /data/web_static/releases/{}/web_static/*"
+           " /data/web_static/releases/{}/".
+           format(file_wo_ext, file_wo_ext)).failed is True:
+        return False
+    print("Move all files and folders to one directory done!")
+    if run("rm -rf /data/web_static/releases/{}/web_static".
+           format(file_wo_ext)).failed is True:
+        return False
+    print("Delete empty folder web_static done!")
+    if run("rm -rf /data/web_static/current").failed is True:
+        return False
+    print("Delete the symbolic link done!")
+    if run("ln -s /data/web_static/releases/{}/ /data/web_static/current".
+           format(file_wo_ext)).failed is True:
+        return False
+    print("Created new symbolic link done!")
+    print("New version deployed!")
+    return True
